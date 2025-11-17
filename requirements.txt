@@ -1,0 +1,4 @@
+psycopg2-binary
+-dotenv
+tkcalendar   # optional if you want date widgets
+
