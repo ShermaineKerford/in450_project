@@ -1,6 +1,8 @@
 # gui.py
+
 import tkinter as tk
 from tkinter import ttk, messagebox
+import psycopg2
 from business import BusinessLayer
 
 
@@ -8,68 +10,146 @@ class AppGUI(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        # Window basics
-        self.title("IN450 Unit 2 Shermaine Kerford")
-        self.geometry("1000x600")
+        self.title("IN450 Unit 3 Shermaine Kerford Database Viewer")
+        self.geometry("1000x650")
 
-        # Create a single BusinessLayer instance for the whole app
-        self.bl = BusinessLayer()
+        # Business layer starts as None until login succeeds
+        self.bl = None
 
-        # ---------- Top controls frame ----------
-        top = ttk.Frame(self, padding=10)
+        # For row limit
+        self.limit_var = tk.IntVar(value=50)
+
+        # Build login UI first
+        self.login_frame = None
+        self.main_frame = None
+        self.text = None
+
+        self.build_login_ui()
+
+    # ---------- Login UI ----------
+
+    def build_login_ui(self):
+        """Create the login screen to collect connection info."""
+        self.login_frame = ttk.Frame(self, padding=20)
+        self.login_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(self.login_frame, text="Database Login", font=("Arial", 14, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(0, 15)
+        )
+
+        # Labels and entries
+        ttk.Label(self.login_frame, text="Server (host):").grid(row=1, column=0, sticky=tk.E, pady=5)
+        ttk.Label(self.login_frame, text="Database:").grid(row=2, column=0, sticky=tk.E, pady=5)
+        ttk.Label(self.login_frame, text="User:").grid(row=3, column=0, sticky=tk.E, pady=5)
+        ttk.Label(self.login_frame, text="Password:").grid(row=4, column=0, sticky=tk.E, pady=5)
+
+        self.entry_server = ttk.Entry(self.login_frame, width=30)
+        self.entry_db = ttk.Entry(self.login_frame, width=30)
+        self.entry_user = ttk.Entry(self.login_frame, width=30)
+        self.entry_password = ttk.Entry(self.login_frame, width=30, show="*")
+
+        self.entry_server.grid(row=1, column=1, pady=5, sticky=tk.W)
+        self.entry_db.grid(row=2, column=1, pady=5, sticky=tk.W)
+        self.entry_user.grid(row=3, column=1, pady=5, sticky=tk.W)
+        self.entry_password.grid(row=4, column=1, pady=5, sticky=tk.W)
+
+        # Default values to save typing
+        self.entry_server.insert(0, "localhost")
+        self.entry_db.insert(0, "in450db")
+
+        btn_connect = ttk.Button(self.login_frame, text="Connect", command=self.on_connect_clicked)
+        btn_connect.grid(row=5, column=0, columnspan=2, pady=(15, 0))
+
+    def on_connect_clicked(self):
+        """Attempt to create a BusinessLayer with the supplied credentials."""
+        host = self.entry_server.get().strip()
+        dbname = self.entry_db.get().strip()
+        user = self.entry_user.get().strip()
+        password = self.entry_password.get().strip()
+
+        if not host or not dbname or not user or not password:
+            messagebox.showerror("Login error", "All fields are required.")
+            return
+
+        try:
+            # Try to connect and run a simple query as a test
+            bl = BusinessLayer(host, dbname, user, password)
+            # Test: try counting in450a; some users may not have permission,
+            # but if connection works we still consider login success.
+            try:
+                _ = bl.get_in450a_count()
+            except psycopg2.Error:
+                # Connection is fine, permissions might be limited – that's OK.
+                pass
+
+            self.bl = bl
+
+        except psycopg2.OperationalError as e:
+            messagebox.showerror("Login failed", f"Could not connect:\n{e}")
+            return
+        except Exception as e:
+            messagebox.showerror("Login failed", f"Unexpected error:\n{e}")
+            return
+
+        # If we reach here, connection succeeded – move to main UI
+        messagebox.showinfo("Connected", f"Connected as user '{user}'")
+        self.login_frame.destroy()
+        self.build_main_ui()
+
+    # ---------- Main UI (after login) ----------
+
+    def build_main_ui(self):
+        """Create the main GUI once the user has logged in."""
+        self.main_frame = ttk.Frame(self, padding=10)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Top controls
+        top = ttk.Frame(self.main_frame)
         top.pack(side=tk.TOP, fill=tk.X)
 
-        # Button: show row count for in450a
         btn_count_a = ttk.Button(
-            top, text="Count rows in in450a", command=self.on_count_in450a
+            top, text="Count rows in IN450a", command=self.on_count_in450a
         )
         btn_count_a.pack(side=tk.LEFT, padx=5)
 
-        # Button: show first + last names from in450b
-        btn_show_names = ttk.Button(
-            top, text="Show names from in450b", command=self.on_show_in450b_names
-        )
-        btn_show_names.pack(side=tk.LEFT, padx=5)
-
-        # Button: show raw rows from in450a
         btn_show_a_rows = ttk.Button(
-            top, text="Show rows from in450a", command=self.on_show_in450a_rows
+            top, text="Show rows from IN450a", command=self.on_show_in450a_rows
         )
         btn_show_a_rows.pack(side=tk.LEFT, padx=5)
 
-        # Button: show full rows from in450b
+        btn_show_b_names = ttk.Button(
+            top, text="Show names from IN450b", command=self.on_show_in450b_names
+        )
+        btn_show_b_names.pack(side=tk.LEFT, padx=5)
+
         btn_show_b_rows = ttk.Button(
-            top, text="Show full rows from in450b", command=self.on_show_in450b_rows
+            top, text="Show full rows from IN450b", command=self.on_show_in450b_rows
         )
         btn_show_b_rows.pack(side=tk.LEFT, padx=5)
 
-        # Row limit label + entry
-        self.limit_var = tk.IntVar(value=50)
+        btn_count_c = ttk.Button(
+            top, text="Count rows in IN450c", command=self.on_count_in450c
+        )
+        btn_count_c.pack(side=tk.LEFT, padx=5)
+
+        # Row limit
         ttk.Label(top, text="Row limit:").pack(side=tk.LEFT, padx=(20, 5))
         ttk.Entry(top, textvariable=self.limit_var, width=6).pack(side=tk.LEFT)
 
-        # ---------- Text display area with scrollbar ----------
-        text_frame = ttk.Frame(self)
-        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Text area
+        text_frame = ttk.Frame(self.main_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Use monospaced font so columns line up
         self.text = tk.Text(text_frame, wrap=tk.NONE, font=("Courier New", 10))
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Vertical scrollbar
         yscroll = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.text.yview)
         yscroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.text.configure(yscrollcommand=yscroll.set)
 
-    # ---------- Helper to display a nicely aligned table ----------
-    def display_table(self, title, column_names, rows):
-        """
-        Shows a simple table in the text area with aligned columns.
+    # ---------- Helper to display table ----------
 
-        title: string shown at the top (can be None)
-        column_names: list of column header strings
-        rows: list of tuples (one tuple per row)
-        """
+    def display_table(self, title, column_names, rows):
         self.text.delete("1.0", tk.END)
 
         if title:
@@ -79,92 +159,100 @@ class AppGUI(tk.Tk):
             self.text.insert(tk.END, "No data found.\n")
             return
 
-        num_cols = len(column_names)
+        fixed_widths = {
+            "first_name": 14,
+            "last_name": 14,
+            "email": 32,
+            "source": 16,
+            "destination": 16,
+            "col1": 6,
+            "col2": 16,
+            "col3": 16,
+            "col4": 10,
+            "col5": 8,
+            "col6": 32,
+        }
 
-        # Start with header name lengths
-        col_widths = [len(name) for name in column_names]
-
-        # Make sure we don't crash if some rows have None values
-        for row in rows:
-            for i in range(num_cols):
-                if i >= len(row):
-                    continue
-                value = "" if row[i] is None else str(row[i])
-                if len(value) > col_widths[i]:
-                    # cap column width a bit to avoid super-wide columns
-                    col_widths[i] = min(len(value), 40)
-
-        # Build header line
         header_parts = []
-        for i, name in enumerate(column_names):
-            header_parts.append(name.ljust(col_widths[i] + 2))
-        header_line = "".join(header_parts)
-
-        # Separator line
+        for name in column_names:
+            width = fixed_widths.get(name, 18)
+            header_parts.append(name.ljust(width))
+        header_line = " ".join(header_parts)
         sep_line = "-" * len(header_line)
 
         self.text.insert(tk.END, header_line + "\n")
         self.text.insert(tk.END, sep_line + "\n")
 
-        # Data rows
         for row in rows:
             line_parts = []
-            for i in range(num_cols):
-                if i < len(row):
-                    value = "" if row[i] is None else str(row[i])
-                else:
-                    value = ""
-                line_parts.append(value.ljust(col_widths[i] + 2))
-            line = "".join(line_parts)
-            self.text.insert(tk.END, line + "\n")
+            for i, name in enumerate(column_names):
+                value = "" if row[i] is None else str(row[i])
+                width = fixed_widths.get(name, 18)
+                line_parts.append(value.ljust(width))
+            self.text.insert(tk.END, " ".join(line_parts) + "\n")
 
     # ---------- Button handlers ----------
 
     def on_count_in450a(self):
-        """Handle click on 'Count rows in in450a' button."""
         try:
             count = self.bl.get_in450a_count()
-            messagebox.showinfo("in450a count", f"Number of rows in in450a: {count}")
+            messagebox.showinfo("IN450a count", f"Rows in IN450a: {count}")
+        except psycopg2.Error as e:
+            messagebox.showerror("Error", f"Database error:\n{e}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to get count: {e}")
+            messagebox.showerror("Error", f"Unexpected error:\n{e}")
 
     def on_show_in450a_rows(self):
-        """Handle click on 'Show rows from in450a' button."""
         try:
             limit = self.limit_var.get()
             rows = self.bl.get_in450a_rows(limit=limit)
             col_names = ["col1", "col2", "col3", "col4", "col5", "col6"]
-            title = f"in450a rows (showing up to {limit})"
+            title = f"IN450a rows (up to {limit})"
             self.display_table(title, col_names, rows)
+        except psycopg2.Error as e:
+            messagebox.showerror("Error", f"Database error:\n{e}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load in450a rows: {e}")
+            messagebox.showerror("Error", f"Unexpected error:\n{e}")
 
     def on_show_in450b_names(self):
-        """Handle click on 'Show names from in450b' button."""
         try:
             limit = self.limit_var.get()
             rows = self.bl.get_in450b_names(limit=limit)
             col_names = ["first_name", "last_name"]
-            title = f"First and last names from in450b (showing up to {limit})"
+            title = f"IN450b first/last names (up to {limit})"
             self.display_table(title, col_names, rows)
+        except psycopg2.Error as e:
+            messagebox.showerror("Error", f"Database error:\n{e}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load in450b names: {e}")
+            messagebox.showerror("Error", f"Unexpected error:\n{e}")
 
     def on_show_in450b_rows(self):
-        """Handle click on 'Show full rows from in450b' button."""
         try:
             limit = self.limit_var.get()
             rows = self.bl.get_in450b_rows(limit=limit)
             col_names = ["first_name", "last_name", "email", "source", "destination"]
-            title = f"Full rows from in450b (showing up to {limit})"
+            title = f"IN450b full rows (up to {limit})"
             self.display_table(title, col_names, rows)
+        except psycopg2.Error as e:
+            messagebox.showerror("Error", f"Database error:\n{e}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load in450b rows: {e}")
+            messagebox.showerror("Error", f"Unexpected error:\n{e}")
+
+    def on_count_in450c(self):
+        try:
+            count = self.bl.get_in450c_count()
+            messagebox.showinfo("IN450c count", f"Rows in IN450c: {count}")
+        except psycopg2.Error as e:
+            messagebox.showerror("Error", f"Database error:\n{e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Unexpected error:\n{e}")
 
     # ---------- Clean shutdown ----------
+
     def on_close(self):
         try:
-            self.bl.close()
+            if self.bl:
+                self.bl.close()
         finally:
             self.destroy()
 
