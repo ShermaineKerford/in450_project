@@ -9,7 +9,7 @@ class AppGUI(tk.Tk):
         super().__init__()
 
         # Window basics
-        self.title("IN450 Unit 2")
+        self.title("IN450 Unit 2 Shermaine Kerford")
         self.geometry("1000x600")
 
         # Create a single BusinessLayer instance for the whole app
