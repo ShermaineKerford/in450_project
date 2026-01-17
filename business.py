@@ -1,5 +1,13 @@
 # business.py
+import os
+from dotenv import load_dotenv
 import psycopg2
+
+load_dotenv()
+
+class BusinessLayerError(Exception):
+    """Safe error type for business-layer failures."""
+    pass
 
 
 class BusinessLayer:
@@ -31,6 +39,7 @@ class BusinessLayer:
                 user=self.user,
                 password=self.password,
             )
+            self._conn.autocommit = True
 
     def close(self):
         """Close the database connection cleanly."""
@@ -41,11 +50,17 @@ class BusinessLayer:
 
     def get_in450a_count(self):
         """Return the number of rows in table app.in450a."""
-        self.connect()
-        with self._conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM app.in450a;")
-            (count,) = cur.fetchone()
-            return count
+        try:
+            self.connect()
+            with self._conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM app.in450a;")
+                (count,) = cur.fetchone()
+                return count
+        except Exception as e:
+            raise BusinessLayerError(
+                "Database operation failed. Please verify your login and permissions."
+            ) from e
+
 
     def get_in450a_rows(self, limit=100):
         """Return some rows from in450a (col1..col6)."""

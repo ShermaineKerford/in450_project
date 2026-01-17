@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import psycopg2
-from business import BusinessLayer
+from business import BusinessLayer, BusinessLayerError
 
 
 class AppGUI(tk.Tk):
@@ -72,29 +72,32 @@ class AppGUI(tk.Tk):
             return
 
         try:
-            # Try to connect and run a simple query as a test
+            # Create business layer with credentials from the login form
             bl = BusinessLayer(host, dbname, user, password)
-            # Test: try counting in450a; some users may not have permission,
-            # but if connection works we still consider login success.
-            try:
-                _ = bl.get_in450a_count()
-            except psycopg2.Error:
-                # Connection is fine, permissions might be limited – that's OK.
-                pass
+            # *** IMPORTANT ***
+            # Explicitly try to open a connection here.
+            # If username/password or server/db are wrong, this will raise
+            # psycopg2.OperationalError and we will treat it as a bad login.
+            bl.connect()
 
+            # If we get here, the connection worked.
             self.bl = bl
 
         except psycopg2.OperationalError as e:
+            # This is a real login/connection failure
             messagebox.showerror("Login failed", f"Could not connect:\n{e}")
             return
         except Exception as e:
+            # Any other unexpected error during login
             messagebox.showerror("Login failed", f"Unexpected error:\n{e}")
             return
 
-        # If we reach here, connection succeeded – move to main UI
+        # If we reach here, login succeeded
         messagebox.showinfo("Connected", f"Connected as user '{user}'")
         self.login_frame.destroy()
         self.build_main_ui()
+
+
 
     # ---------- Main UI (after login) ----------
 
@@ -213,6 +216,8 @@ class AppGUI(tk.Tk):
             messagebox.showerror("Error", f"Database error:\n{e}")
         except Exception as e:
             messagebox.showerror("Error", f"Unexpected error:\n{e}")
+        except Exception:
+            messagebox.showerror("Error", "Something unexpected happened. Please try again.")
 
     def on_show_in450b_names(self):
         try:
